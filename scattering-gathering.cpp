@@ -86,8 +86,8 @@ int main(int argc, char **argv) {
   // The process with rank 0 will hold all the points
   // The others will keep the variable poitns as a null pointer
   MPI_Barrier(MPI_COMM_WORLD);
-  double *points = nullptr;
-  double *recv_points = nullptr;
+  double *points = NULL;
+  double *recv_points = new double[p_count * p_count * 2];
   
   if (rank == 0) {
     points = new double[p_count * p_count * 2];
@@ -103,46 +103,37 @@ int main(int argc, char **argv) {
     }
   }
 
-  MPI_Barrier(MPI_COMM_WORLD);
-
   // Scatter the points to all processes
   MPI_Scatter(points, p_count * 2, MPI_DOUBLE, recv_points, p_count * 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
   // The number of points we hold
-  int npts = p_count*p_count;
-
-  // Buffer for gathering results on process 0
-  int *gather_buffer = nullptr;
-
-  // Allocate buffer on process 0
-  if (rank == 0) {
-    gather_buffer = new int[p_count * p_count];
-  }
+  int npts = p_count*2;
   
   // Computing the mandelbrot set.
   // This function is already coded and you don't have to worry about it
-  int mset[npts];
+  int *mset = new int[npts];
   compute_mandelbrot(recv_points, npts, mset);
 
-  // Gathering the results on process 0
+  // Buffer for gathering results on process 0
+  int *gather_buffer = NULL;
+    if (rank == 0) {
+        gather_buffer = new int[p_count * p_count];
+    }
+
+  // Gather the results on process 0
   MPI_Gather(mset, npts, MPI_INT, gather_buffer, npts, MPI_INT, 0, MPI_COMM_WORLD);
 
-
   // Printing only one result that will be used to create the image
-  if (rank == 0) {
-    for (int yp = 0; yp < p_count; ++yp) {
-      for (int xp = 0; xp < p_count; ++xp)
-        std::cout << gather_buffer[yp * p_count + xp] << " ";
+  if (rank==0) {
+    for (int yp=0; yp < p_count; ++yp) {
+      for (int xp=0; xp < p_count; ++xp)
+	std::cout << gather_buffer[yp*p_count + xp] << " ";
       std::cout << std::endl;
     }
   }
 
   // Cleaning up the mess and exiting properly
-  if (rank == 0) {
-    delete[] points;
-    delete[] gather_buffer;
-  }
-  delete[] recv_points;
+  delete [] points;
   
   MPI_Finalize();
   return 0;
