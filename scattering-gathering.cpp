@@ -87,7 +87,6 @@ int main(int argc, char **argv) {
   // The others will keep the variable poitns as a null pointer
   MPI_Barrier(MPI_COMM_WORLD);
   double *points = NULL;
-  double *recv_points = new double[p_count * p_count * 2];
   
   if (rank == 0) {
     points = new double[p_count * p_count * 2];
@@ -103,25 +102,29 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Scatter the points to all processes
-  MPI_Scatter(points, p_count * 2, MPI_DOUBLE, recv_points, p_count * 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  // Distributing the points over processes
+  int npts = p_count*p_count/size;
+  double recv_points[npts*2];
 
-  // The number of points we hold
-  int npts = p_count*2;
+  MPI_Scatter(points, npts*2, MPI_DOUBLE, recv_points, npts*2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  MPI_Barrier(MPI_COMM_WORLD);
   
   // Computing the mandelbrot set.
   // This function is already coded and you don't have to worry about it
-  int *mset = new int[npts];
+  int mset[npts];
   compute_mandelbrot(recv_points, npts, mset);
 
   // Buffer for gathering results on process 0
-  int *gather_buffer = NULL;
+  int *gather_buffer;
     if (rank == 0) {
-        gather_buffer = new int[p_count * p_count];
+        gather_buffer = new int[npts*size];
     }
 
   // Gather the results on process 0
   MPI_Gather(mset, npts, MPI_INT, gather_buffer, npts, MPI_INT, 0, MPI_COMM_WORLD);
+
+  MPI_Barrier(MPI_COMM_WORLD);
 
   // Printing only one result that will be used to create the image
   if (rank==0) {
@@ -133,7 +136,10 @@ int main(int argc, char **argv) {
   }
 
   // Cleaning up the mess and exiting properly
-  delete [] points;
+  if(rank==0){
+    delete [] points;
+    delete [] gather_buffer;
+  }
   
   MPI_Finalize();
   return 0;
